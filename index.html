@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Savings Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Personal Savings Tracker</h1>
+            <div class="header-controls">
+                <select id="monthSelector" class="month-selector"></select>
+                <button id="newMonthBtn" class="btn btn-primary">+ New Month</button>
+                <button id="exportBtn" class="btn btn-secondary">Export Data</button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="daily-tracker">Daily Tracker</button>
+            <button class="tab-btn" data-tab="month-setup">Month Setup</button>
+            <button class="tab-btn" data-tab="month-overview">Overview</button>
+            <button class="tab-btn" data-tab="investment-tracker">Investments</button>
+            <button class="tab-btn" data-tab="compare-files">Compare Files</button>
+            <button class="tab-btn" data-tab="history">History</button>
+        </nav>
+
+        <!-- TAB 1: Daily Tracker -->
+        <div id="daily-tracker" class="tab-content active">
+            <div class="tracker-grid">
+                <!-- Left: Quick Stats -->
+                <div class="stats-section">
+                    <div class="stat-card">
+                        <h3>Daily Limit</h3>
+                        <p class="stat-value" id="dailyLimit">₹0</p>
+                        <small id="limitNote"></small>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Remaining Today</h3>
+                        <p class="stat-value" id="remainingToday">₹0</p>
+                        <div class="progress-bar">
+                            <div id="remainingBar" class="progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card debt-card">
+                        <h3>Debt Status</h3>
+                        <p class="stat-value" id="debtStatus">₹0</p>
+                        <small id="debtNote">No debt</small>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Spent (Last 7 Days)</h3>
+                        <p class="stat-value" id="sevenDaysSpent">₹0</p>
+                        <small style="color: lemonchiffon;">Past week total</small>
+                    </div>
+                </div>
+
+                <!-- Right: Expense Form & History -->
+                <div class="entry-section">
+                    <h3>Add Daily Expense</h3>
+                    <form id="expenseForm">
+                        <div class="form-group">
+                            <label for="expenseDate">Date:</label>
+                            <input type="date" id="expenseDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenseAmount">Total Spent (₹):</label>
+                            <input type="number" id="expenseAmount" min="0" step="0.01" required placeholder="0.00">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Record Expense</button>
+                    </form>
+
+                    <h3 style="margin-top: 2rem;"><span id="selectedDateLabel">Today's</span> Entry</h3>
+                    <div id="todayEntry" class="entry-display">
+                        <p>No entry for today yet</p>
+                    </div>
+
+                    <h3 style="margin-top: 2rem;">Recent Entries (Last 7 Days)</h3>
+                    <div id="recentEntries" class="entries-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Month Setup -->
+        <div id="month-setup" class="tab-content">
+            <div class="setup-container">
+                <h2>Monthly Configuration</h2>
+                <form id="monthSetupForm">
+                    <div class="form-section">
+                        <h3>Income & Fixed Configuration</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="income">Total Monthly Income (₹):</label>
+                                <input type="number" id="income" min="0" step="0.01" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="investments">Monthly Investments (₹):</label>
+                                <input type="number" id="investments" min="0" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="daysInMonth">Days in Month:</label>
+                                <input type="number" id="daysInMonth" min="28" max="31" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="basicExpenses">Total Monthly Expenses (₹):</label>
+                                <input type="number" id="basicExpenses" min="0" step="0.01" disabled>
+                                <small style="color: #999;">Auto-calculated from expense items below</small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="penaltyPercentage">Penalty Percentage for Debt (%):</label>
+                                <input type="number" id="penaltyPercentage" min="0" max="100" step="0.01" value="50">
+                                <small style="color: #999;">Spending limit reduction when in debt</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Monthly Expenses Breakdown</h3>
+                        <p class="note">Add detailed expense items to track what you spend on (rent, utilities, food, etc.)</p>
+                        
+                        <div class="expense-input-row">
+                            <div class="form-group">
+                                <label for="newExpenseName">Expense Type:</label>
+                                <input type="text" id="newExpenseName" placeholder="e.g., Rent, Utilities, Food">
+                            </div>
+                            <div class="form-group">
+                                <label for="newExpenseAmount">Amount (₹):</label>
+                                <input type="number" id="newExpenseAmount" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <button type="button" id="addExpenseItemBtn" class="btn btn-primary" style="align-self: flex-end; margin-bottom: 0;">+ Add</button>
+                        </div>
+
+                        <div id="expenseItemsList" class="expenses-list-container"></div>
+
+                        <div id="expenseTotal" class="info-box" style="margin-top: 20px;">
+                            <h4>Total Monthly Expenses: <span id="expenseTotalAmount">₹0.00</span></h4>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Savings Goal Allocation</h3>
+                        <p class="note">Allocate how daily surplus is distributed to your savings goals</p>
+                        <div id="savingsGoalsContainer"></div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">Save Configuration</button>
+                        <button type="button" id="copyFromPrevBtn" class="btn btn-secondary">Copy from Previous Month</button>
+                    </div>
+
+                    <div id="calculatedValues" class="info-box" style="display: none;">
+                        <h4>Calculated Values:</h4>
+                        <p>Remaining after basic expenses & investments: <strong id="calcRemaining">₹0</strong></p>
+                        <p>Daily spending limit: <strong id="calcDailyLimit">₹0</strong>/day</p>
+                        <p>Total Spent (up to today): <strong id="calcTotalSpend">₹0</strong></p>
+                        <p>Monthly Investment: <strong id="calcTotalInv">₹0</strong></p>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- TAB 3: Month Overview -->
+        <div id="month-overview" class="tab-content">
+            <div class="overview-grid">
+                <!-- Summary Stats -->
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <h3>Total Spent</h3>
+                        <p class="stat-value" id="totalSpent">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Saved</h3>
+                        <p class="stat-value" id="totalSaved">₹0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Days Logged</h3>
+                        <p class="stat-value" id="daysLogged">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Current Debt</h3>
+                        <p class="stat-value" id="monthDebt">₹0</p>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-container">
+                    <div class="chart-box">
+                        <h3>Daily Spending Trend</h3>
+                        <canvas id="spendingChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <h3>Savings by Goal</h3>
+                        <canvas id="savingsChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <h3>Expenses by Category</h3>
+                        <canvas id="expensesChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Detailed Month Info -->
+                <div class="detail-section">
+                    <h3>Month Details</h3>
+                    <table class="detail-table">
+                        <tr>
+                            <td>Income:</td>
+                            <td id="detailIncome">₹0</td>
+                        </tr>
+                        <tr>
+                            <td>Basic Expenses:</td>
+                            <td id="detailBasicExp">₹0</td>
+                        </tr>
+                        <tr>
+                            <td>Investments:</td>
+                            <td id="detailInv">₹0</td>
+                        </tr>
+                        <tr>
+                            <td>Available for Livelihood:</td>
+                            <td id="detailAvailable">₹0</td>
+                        </tr>
+                        <tr>
+                            <td>Days in Month:</td>
+                            <td id="detailDays">0</td>
+                        </tr>
+                        <tr>
+                            <td>Daily Base Limit:</td>
+                            <td id="detailDailyLimit">₹0</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Savings Goals Breakdown -->
+                <div class="goals-section">
+                    <h3>Savings Goals</h3>
+                    <div id="goalsBreakdown"></div>
+                </div>
+
+                <!-- Monthly Expenses Breakdown -->
+                <div class="goals-section">
+                    <h3>Monthly Expenses Breakdown</h3>
+                    <div id="expensesBreakdown"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: Investments -->
+        <div id="investment-tracker" class="tab-content">
+            <div class="investment-page">
+                <h2>Investment Tracker</h2>
+
+                <div class="investment-summary-grid">
+                    <div class="stat-card invest-card">
+                        <h3>Total Available</h3>
+                        <p class="stat-value" id="investmentTotalAvailable">₹0</p>
+                        <small>Monthly allocation plus daily investment surplus</small>
+                    </div>
+                    <div class="stat-card invest-card">
+                        <h3>Total Invested</h3>
+                        <p class="stat-value" id="investmentTotalInvested">₹0</p>
+                        <small>All recorded units x amount</small>
+                    </div>
+                    <div class="stat-card invest-card">
+                        <h3>Ready To Invest</h3>
+                        <p class="stat-value" id="investmentTotalRemaining">₹0</p>
+                        <small>Carried forward until used</small>
+                    </div>
+                </div>
+
+                <div class="investments-container">
+                    <div class="investment-subsection">
+                        <h4>Monthly Investment Allocation</h4>
+                        <div class="investment-stats">
+                            <div class="investment-stat">
+                                <span class="stat-label">Allocated Amount:</span>
+                                <span class="stat-value" id="monthlyAllocated">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Previously Carried Over:</span>
+                                <span class="stat-value" id="monthlyCarryover">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Already Invested:</span>
+                                <span class="stat-value" id="monthlyInvested">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Remaining:</span>
+                                <span class="stat-value" id="monthlyRemaining">₹0</span>
+                            </div>
+                        </div>
+
+                        <div class="investment-form">
+                            <h5>Add Investment</h5>
+                            <div class="investment-form-row">
+                                <div class="form-group">
+                                    <label for="monthlyInvestName">Investment Name:</label>
+                                    <input type="text" id="monthlyInvestName" placeholder="e.g., Mutual Fund, Stock">
+                                </div>
+                                <div class="form-group">
+                                    <label for="monthlyInvestUnits">Units:</label>
+                                    <input type="number" id="monthlyInvestUnits" min="0" step="0.0001" placeholder="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="monthlyInvestAmount">Amount Per Unit (₹):</label>
+                                    <input type="number" id="monthlyInvestAmount" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <button type="button" id="addMonthlyInvestBtn" class="btn btn-primary">+ Add</button>
+                            </div>
+                        </div>
+
+                        <div id="monthlyInvestmentsList" class="investments-list"></div>
+                    </div>
+
+                    <div class="investment-subsection">
+                        <h4>Daily Expense Surplus Investments</h4>
+                        <p class="note">This amount comes from the savings goal that contains "Investment". Add entries whenever you consolidate and invest it.</p>
+
+                        <div class="investment-stats">
+                            <div class="investment-stat">
+                                <span class="stat-label">Available from Surplus:</span>
+                                <span class="stat-value" id="dailyAvailable">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Previously Carried Over:</span>
+                                <span class="stat-value" id="dailyCarryover">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Already Invested:</span>
+                                <span class="stat-value" id="dailyInvested">₹0</span>
+                            </div>
+                            <div class="investment-stat">
+                                <span class="stat-label">Remaining:</span>
+                                <span class="stat-value" id="dailyRemaining">₹0</span>
+                            </div>
+                        </div>
+
+                        <div class="investment-form">
+                            <h5>Add Investment</h5>
+                            <div class="investment-form-row">
+                                <div class="form-group">
+                                    <label for="dailyInvestName">Investment Name:</label>
+                                    <input type="text" id="dailyInvestName" placeholder="e.g., Mutual Fund, Stock">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dailyInvestUnits">Units:</label>
+                                    <input type="number" id="dailyInvestUnits" min="0" step="0.0001" placeholder="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dailyInvestAmount">Amount Per Unit (₹):</label>
+                                    <input type="number" id="dailyInvestAmount" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <button type="button" id="addDailyInvestBtn" class="btn btn-primary">+ Add</button>
+                            </div>
+                        </div>
+
+                        <div id="dailyInvestmentsList" class="investments-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: Compare Files -->
+        <div id="compare-files" class="tab-content">
+            <div class="compare-container">
+                <h2>Import & View Saved Data</h2>
+                
+                <div class="file-upload-section">
+                    <h3>📁 Select Exported JSON File</h3>
+                    <p class="note">Choose a JSON file from your savings_overview folder (exported from this app or another instance)</p>
+                    
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" accept=".json" />
+                        <button type="button" id="loadFileBtn" class="btn btn-primary">Load File</button>
+                    </div>
+
+                    <div id="fileInfo" class="info-box" style="display: none; margin-top: 20px;">
+                        <h4>📄 Loaded File: <span id="loadedFileName">-</span></h4>
+                        <p>Months: <span id="fileMonthsCount">0</span> | Last Updated: <span id="fileLastUpdated">-</span></p>
+                    </div>
+                </div>
+
+                <!-- Month Selector for Loaded File -->
+                <div id="fileMonthSelector" class="form-section" style="display: none; margin-top: 20px;">
+                    <h3>Select Month to View</h3>
+                    <select id="fileMonthSelect" class="month-selector"></select>
+                </div>
+
+                <!-- Overview of Loaded File Data -->
+                <div id="fileOverview" style="display: none; margin-top: 30px;">
+                    <div class="summary-stats">
+                        <div class="stat-card">
+                            <h3>Monthly Income</h3>
+                            <p class="stat-value" id="fileIncome">₹0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Expenses</h3>
+                            <p class="stat-value" id="fileBasicExp">₹0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Investments</h3>
+                            <p class="stat-value" id="fileInvestments">₹0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Spent</h3>
+                            <p class="stat-value" id="fileSpent">₹0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Saved</h3>
+                            <p class="stat-value" id="fileSaved">₹0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Current Debt</h3>
+                            <p class="stat-value" id="fileDebt">₹0</p>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="charts-container">
+                        <div class="chart-box">
+                            <h3>Daily Spending Trend</h3>
+                            <canvas id="fileSpendingChart"></canvas>
+                        </div>
+                        <div class="chart-box">
+                            <h3>Savings by Goal</h3>
+                            <canvas id="fileSavingsChart"></canvas>
+                        </div>
+                        <div class="chart-box">
+                            <h3>Expenses by Category</h3>
+                            <canvas id="fileExpensesChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Detail Section -->
+                    <div class="detail-section" style="margin-top: 30px;">
+                        <h3>Month Details</h3>
+                        <table class="detail-table">
+                            <tr>
+                                <td>Month:</td>
+                                <td id="fileMonthName">-</td>
+                            </tr>
+                            <tr>
+                                <td>Income:</td>
+                                <td id="fileDetail-Income">₹0</td>
+                            </tr>
+                            <tr>
+                                <td>Basic Expenses:</td>
+                                <td id="fileDetail-Exp">₹0</td>
+                            </tr>
+                            <tr>
+                                <td>Investments:</td>
+                                <td id="fileDetail-Inv">₹0</td>
+                            </tr>
+                            <tr>
+                                <td>Available for Livelihood:</td>
+                                <td id="fileDetail-Available">₹0</td>
+                            </tr>
+                            <tr>
+                                <td>Days in Month:</td>
+                                <td id="fileDetail-Days">0</td>
+                            </tr>
+                            <tr>
+                                <td>Daily Base Limit:</td>
+                                <td id="fileDetail-DailyLimit">₹0</td>
+                            </tr>
+                            <tr>
+                                <td>Days Logged:</td>
+                                <td id="fileDetail-DaysLogged">0</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Expenses & Savings Breakdown -->
+                    <div class="detail-section" style="margin-top: 30px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                            <div>
+                                <h3>Expenses by Category</h3>
+                                <div id="fileExpensesBreakdown"></div>
+                            </div>
+                            <div>
+                                <h3>Savings by Goal</h3>
+                                <div id="fileSavingsBreakdown"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 6: History -->
+        <div id="history" class="tab-content">
+            <div class="history-container">
+                <h2>Month History</h2>
+                <div id="monthsList" class="months-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for New Month -->
+    <div id="newMonthModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Create New Month</h2>
+            <div class="form-group">
+                <label for="newMonthSelect">Select Month:</label>
+                <input type="month" id="newMonthSelect" required>
+            </div>
+            <div class="button-group">
+                <button id="createMonthBtn" class="btn btn-primary">Create</button>
+                <button class="btn btn-secondary close">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>

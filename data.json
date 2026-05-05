@@ -1,0 +1,28 @@
+{
+  "months": [
+    {
+      "id": "2026-04",
+      "monthName": "April 2026",
+      "income": 0,
+      "expenseItems": [],
+      "basicExpenses": 0,
+      "investments": 0,
+      "daysInMonth": 30,
+      "carryoverDebt": 0,
+      "savingsGoals": [
+        { "name": "Emergency", "percentage": 40.00 },
+        { "name": "Travel", "percentage": 20.00 },
+        { "name": "Investment Account", "percentage": 40.00 }
+      ],
+      "dailyEntries": [],
+      "totalSavingsAllocated": {
+        "Emergency": 0,
+        "Travel": 0,
+        "Investment Account": 0
+      },
+      "totalDebt": 0,
+      "createdAt": "2026-04-27"
+    }
+  ],
+  "currentMonthId": "2026-04"
+}
