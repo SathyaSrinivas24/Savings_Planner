@@ -83,8 +83,9 @@ class SavingsApp {
             id: monthId,
             monthName: this.getMonthName(date),
             income: 0,
-            expenseItems: [], // Detailed expense breakdown
-            basicExpenses: 0, // Total (auto-calculated from items)
+            expenseItems: [], // Detailed expense breakdown - each item has type: "expense" or "category"
+            basicExpenses: 0, // Total basic expenses (auto-calculated from items with type: "expense")
+            categoryAllocations: 0, // Total category allocations (auto-calculated from items with type: "category")
             investments: 0,
             daysInMonth: daysInMonth,
             carryoverDebt: 0,
@@ -101,8 +102,6 @@ class SavingsApp {
                 'Investment Account': 0
             },
             totalDebt: 0,
-            // Category-based expense tracking
-            categories: [],  // Array of {id, name, allocatedAmount, expenses: [{date, amount}]}
             // Investments Tracking
             monthlyInvestments: {
                 allocatedAmount: 0,
@@ -143,10 +142,17 @@ class SavingsApp {
             };
         }
 
-        // Ensure categories array exists
-        if (!Array.isArray(month.categories)) {
-            month.categories = [];
+        // Ensure expenseItems is an array and add type field if missing
+        if (!Array.isArray(month.expenseItems)) {
+            month.expenseItems = [];
         }
+
+        // Migrate old data - add type field to existing items
+        month.expenseItems.forEach(item => {
+            if (!item.type) {
+                item.type = 'expense'; // Default to basic expense
+            }
+        });
 
         month.monthlyInvestments.investments = month.monthlyInvestments.investments || [];
         month.dailyExpenseInvestments.investments = month.dailyExpenseInvestments.investments || [];
@@ -217,16 +223,10 @@ class SavingsApp {
         target.income = source.income;
         target.expenseItems = JSON.parse(JSON.stringify(source.expenseItems || []));
         target.basicExpenses = source.basicExpenses;
+        target.categoryAllocations = source.categoryAllocations || 0;
         target.investments = source.investments;
         target.penaltyPercentage = source.penaltyPercentage || 50;
         target.savingsGoals = JSON.parse(JSON.stringify(source.savingsGoals));
-        
-        // Copy categories with allocations but clear expenses
-        target.categories = (source.categories || []).map(cat => ({
-            ...JSON.parse(JSON.stringify(cat)),
-            expenses: [] // Clear expenses, keep allocations
-        }));
-        
         // Don't copy debt carry-over
         target.carryoverDebt = 0;
         target.dailyEntries = [];
@@ -291,7 +291,7 @@ class SavingsApp {
             this.currentMonth.investments
         );
         
-        // Add remaining amounts from all categories
+        // Add remaining amounts from category allocations
         const categoryRemaining = this.getTotalCategoryRemaining();
         
         // Add remaining monthly investment amounts if any
@@ -301,171 +301,34 @@ class SavingsApp {
     }
 
     /**
-     * Calculate total remaining amount across all categories
+     * Calculate total remaining amount across all category allocations
      */
     getTotalCategoryRemaining() {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
+        if (!this.currentMonth || !Array.isArray(this.currentMonth.expenseItems)) {
             return 0;
         }
         
         let totalRemaining = 0;
-        this.currentMonth.categories.forEach(category => {
-            const categoryRemaining = this.getCategoryRemaining(category.id);
-            totalRemaining += categoryRemaining;
+        this.currentMonth.expenseItems.forEach(item => {
+            if (item.type === 'category') {
+                const remaining = this.getCategoryRemaining(item);
+                totalRemaining += remaining;
+            }
         });
         
         return totalRemaining;
     }
 
     /**
-     * Calculate remaining amount for a specific category
+     * Calculate remaining amount for a specific category item
      */
-    getCategoryRemaining(categoryId) {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return 0;
-        }
+    getCategoryRemaining(categoryItem) {
+        if (!categoryItem || categoryItem.type !== 'category') return 0;
         
-        const category = this.currentMonth.categories.find(c => c.id === categoryId);
-        if (!category) return 0;
-        
-        let totalSpent = 0;
-        if (Array.isArray(category.expenses)) {
-            category.expenses.forEach(expense => {
-                totalSpent += parseFloat(expense.amount) || 0;
-            });
-        }
-        
-        return Math.max(0, category.allocatedAmount - totalSpent);
-    }
-
-    /**
-     * Get all categories for current month
-     */
-    getCategories() {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return [];
-        }
-        return this.currentMonth.categories;
-    }
-
-    /**
-     * Add a new category
-     */
-    addCategory(name, allocatedAmount) {
-        if (!this.currentMonth) return false;
-        
-        if (!Array.isArray(this.currentMonth.categories)) {
-            this.currentMonth.categories = [];
-        }
-        
-        const categoryId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        const category = {
-            id: categoryId,
-            name: name.trim(),
-            allocatedAmount: parseFloat(allocatedAmount) || 0,
-            expenses: [],
-            createdAt: new Date().toISOString()
-        };
-        
-        this.currentMonth.categories.push(category);
-        this.saveData();
-        return categoryId;
-    }
-
-    /**
-     * Remove a category
-     */
-    removeCategory(categoryId) {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return false;
-        }
-        
-        const index = this.currentMonth.categories.findIndex(c => c.id === categoryId);
-        if (index === -1) return false;
-        
-        this.currentMonth.categories.splice(index, 1);
-        this.saveData();
-        return true;
-    }
-
-    /**
-     * Update category allocation amount
-     */
-    updateCategory(categoryId, name, allocatedAmount) {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return false;
-        }
-        
-        const category = this.currentMonth.categories.find(c => c.id === categoryId);
-        if (!category) return false;
-        
-        category.name = name.trim();
-        category.allocatedAmount = parseFloat(allocatedAmount) || 0;
-        this.saveData();
-        return true;
-    }
-
-    /**
-     * Add an expense to a category
-     */
-    addCategoryExpense(categoryId, amount, description = '') {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return false;
-        }
-        
-        const category = this.currentMonth.categories.find(c => c.id === categoryId);
-        if (!category) return false;
-        
-        if (!Array.isArray(category.expenses)) {
-            category.expenses = [];
-        }
-        
-        const expense = {
-            id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            amount: parseFloat(amount) || 0,
-            description: description.trim(),
-            date: this.getLocalDateString(),
-            timestamp: new Date().toISOString()
-        };
-        
-        category.expenses.push(expense);
-        this.saveData();
-        return expense.id;
-    }
-
-    /**
-     * Remove an expense from a category
-     */
-    removeCategoryExpense(categoryId, expenseId) {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return false;
-        }
-        
-        const category = this.currentMonth.categories.find(c => c.id === categoryId);
-        if (!category || !Array.isArray(category.expenses)) return false;
-        
-        const index = category.expenses.findIndex(e => e.id === expenseId);
-        if (index === -1) return false;
-        
-        category.expenses.splice(index, 1);
-        this.saveData();
-        return true;
-    }
-
-    /**
-     * Get expenses for a specific category
-     */
-    getCategoryExpenses(categoryId) {
-        if (!this.currentMonth || !Array.isArray(this.currentMonth.categories)) {
-            return [];
-        }
-        
-        const category = this.currentMonth.categories.find(c => c.id === categoryId);
-        if (!category || !Array.isArray(category.expenses)) {
-            return [];
-        }
-        
-        return category.expenses;
+        // For now, categories don't have individual expenses tracking
+        // They just have allocated amounts that can be spent throughout the month
+        // In a future enhancement, we could add expense tracking per category
+        return categoryItem.amount || 0;
     }
 
     getBaseDailyLimit() {
@@ -821,12 +684,13 @@ class SavingsApp {
     // EXPENSE ITEMS MANAGEMENT
     // ============================================================
 
-    addExpenseItem(name, amount) {
+    addExpenseItem(name, amount, type = 'expense') {
         if (!this.currentMonth) return false;
 
         const item = {
             name: name.trim(),
             amount: parseFloat(amount) || 0,
+            type: type, // 'expense' or 'category'
             addedAt: new Date().toISOString()
         };
 
@@ -835,7 +699,7 @@ class SavingsApp {
         }
 
         this.currentMonth.expenseItems.push(item);
-        this.updateBasicExpensesTotal();
+        this.updateExpenseTotals();
         this.saveData();
         return true;
     }
@@ -844,39 +708,56 @@ class SavingsApp {
         if (!this.currentMonth || !this.currentMonth.expenseItems) return false;
 
         this.currentMonth.expenseItems.splice(index, 1);
-        this.updateBasicExpensesTotal();
+        this.updateExpenseTotals();
         this.saveData();
         return true;
     }
 
-    updateExpenseItem(index, name, amount) {
+    updateExpenseItem(index, name, amount, type = null) {
         if (!this.currentMonth || !this.currentMonth.expenseItems || index < 0 || index >= this.currentMonth.expenseItems.length) {
             return false;
         }
 
         this.currentMonth.expenseItems[index].name = name.trim();
         this.currentMonth.expenseItems[index].amount = parseFloat(amount) || 0;
-        this.updateBasicExpensesTotal();
+        if (type !== null) {
+            this.currentMonth.expenseItems[index].type = type;
+        }
+        this.updateExpenseTotals();
         this.saveData();
         return true;
     }
 
-    updateBasicExpensesTotal() {
+    updateExpenseTotals() {
         if (!this.currentMonth) return;
 
-        let total = 0;
+        let basicExpenses = 0;
+        let categoryAllocations = 0;
+
         if (this.currentMonth.expenseItems && Array.isArray(this.currentMonth.expenseItems)) {
             this.currentMonth.expenseItems.forEach(item => {
-                total += parseFloat(item.amount) || 0;
+                const amount = parseFloat(item.amount) || 0;
+                if (item.type === 'category') {
+                    categoryAllocations += amount;
+                } else {
+                    basicExpenses += amount;
+                }
             });
         }
-        this.currentMonth.basicExpenses = total;
+
+        this.currentMonth.basicExpenses = basicExpenses;
+        this.currentMonth.categoryAllocations = categoryAllocations;
     }
 
-    getExpenseItems() {
+    getExpenseItems(type = null) {
         if (!this.currentMonth || !this.currentMonth.expenseItems) {
             return [];
         }
+        
+        if (type) {
+            return this.currentMonth.expenseItems.filter(item => item.type === type);
+        }
+        
         return this.currentMonth.expenseItems;
     }
 

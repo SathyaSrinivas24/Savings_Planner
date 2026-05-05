@@ -77,11 +77,6 @@
                         <p>No entry for today yet</p>
                     </div>
 
-                    <h3 style="margin-top: 2rem;">Category Expenses</h3>
-                    <div id="categoryExpensesSection" class="category-expenses-section">
-                        <p style="color: #999;">No categories configured. Add categories in Month Setup tab.</p>
-                    </div>
-
                     <h3 style="margin-top: 2rem;">Recent Entries (Last 7 Days)</h3>
                     <div id="recentEntries" class="entries-list"></div>
                 </div>
@@ -127,16 +122,23 @@
 
                     <div class="form-section">
                         <h3>Monthly Expenses Breakdown</h3>
-                        <p class="note">Add detailed expense items (rent, utilities, food, etc.) and categories (car loan, house rent, home expenses) to track what you spend on. Category remaining amounts and monthly investment remaining amounts add to daily spending limit.</p>
+                        <p class="note">Add detailed expense items and category allocations. Basic expenses are subtracted from income, while category remaining amounts add to daily spending limit.</p>
                         
                         <div class="expense-input-row">
                             <div class="form-group">
-                                <label for="newExpenseName">Expense Type:</label>
-                                <input type="text" id="newExpenseName" placeholder="e.g., Rent, Utilities, Food">
+                                <label for="newExpenseName">Name:</label>
+                                <input type="text" id="newExpenseName" placeholder="e.g., Rent, Car Loan, Food">
                             </div>
                             <div class="form-group">
                                 <label for="newExpenseAmount">Amount (₹):</label>
                                 <input type="number" id="newExpenseAmount" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="newExpenseType">Type:</label>
+                                <select id="newExpenseType">
+                                    <option value="expense">Basic Expense</option>
+                                    <option value="category">Category Allocation</option>
+                                </select>
                             </div>
                             <button type="button" id="addExpenseItemBtn" class="btn btn-primary" style="align-self: flex-end; margin-bottom: 0;">+ Add</button>
                         </div>
@@ -144,29 +146,8 @@
                         <div id="expenseItemsList" class="expenses-list-container"></div>
 
                         <div id="expenseTotal" class="info-box" style="margin-top: 20px;">
-                            <h4>Total Monthly Expenses: <span id="expenseTotalAmount">₹0.00</span></h4>
-                        </div>
-
-                        <h4 style="margin-top: 30px; margin-bottom: 15px;">Category-Based Expense Allocation</h4>
-                        <p class="note" style="margin-bottom: 15px;">Add categories with allocated budgets. Track expenses against these allocations. Remaining amounts add to daily spending limit.</p>
-                        
-                        <div class="expense-input-row">
-                            <div class="form-group">
-                                <label for="newCategoryName">Category Name:</label>
-                                <input type="text" id="newCategoryName" placeholder="e.g., Car Loan, House Rent">
-                            </div>
-                            <div class="form-group">
-                                <label for="newCategoryAmount">Allocated Amount (₹):</label>
-                                <input type="number" id="newCategoryAmount" min="0" step="0.01" placeholder="0.00">
-                            </div>
-                            <button type="button" id="addCategoryBtn" class="btn btn-primary" style="align-self: flex-end; margin-bottom: 0;">+ Add Category</button>
-                        </div>
-
-                        <div id="categoriesList" class="categories-list-container"></div>
-
-                        <div id="categoryTotal" class="info-box" style="margin-top: 20px;">
-                            <h4>Total Category Allocations: <span id="categoryTotalAmount">₹0.00</span></h4>
-                            <p style="margin-top: 10px; font-size: 0.9em;">Remaining in All Categories: <span id="categoryRemainingAmount" style="font-weight: bold;">₹0.00</span></p>
+                            <h4>Total Basic Expenses: <span id="expenseTotalAmount">₹0.00</span></h4>
+                            <p style="margin-top: 10px;">Total Category Allocations: <span id="categoryTotalAmount">₹0.00</span></p>
                         </div>
                     </div>
 
@@ -178,7 +159,7 @@
                     <div id="calculatedValues" class="info-box" style="display: none;">
                         <h4>Calculated Values:</h4>
                         <p>Remaining after basic expenses & investments: <strong id="calcRemaining">₹0</strong></p>
-                        <p>Plus category remaining: <strong id="calcCategoryRemaining">₹0</strong></p>
+                        <p>Plus category allocations: <strong id="calcCategoryRemaining">₹0</strong></p>
                         <p>Plus monthly investment remaining: <strong id="calcInvestmentRemaining">₹0</strong></p>
                         <p>Daily spending limit: <strong id="calcDailyLimit">₹0</strong>/day</p>
                         <p>Total Spent (up to today): <strong id="calcTotalSpend">₹0</strong></p>

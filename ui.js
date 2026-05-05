@@ -108,9 +108,6 @@ class SavingsUI {
         // Add Expense Item Button
         document.getElementById('addExpenseItemBtn').addEventListener('click', () => this.handleAddExpenseItem());
 
-        // Add Category Button
-        document.getElementById('addCategoryBtn').addEventListener('click', () => this.handleAddCategory());
-
         // Copy from Previous
         document.getElementById('copyFromPrevBtn').addEventListener('click', () => this.copyFromPreviousMonth());
 
@@ -331,9 +328,6 @@ class SavingsUI {
         // Update today's entry (or selected date entry)
         this.renderSelectedDateEntry(selectedDate);
 
-        // Update category expenses
-        this.renderCategoryExpenses();
-
         // Update entries for selected date
         this.renderEntriesForSelectedDate();
     }
@@ -517,7 +511,6 @@ class SavingsUI {
         }
 
         this.renderExpenseItems();
-        this.renderCategories();
         this.renderSavingsGoalsInput();
         this.updateCalculatedValues();
     }
@@ -552,16 +545,28 @@ class SavingsUI {
         if (items.length === 0) {
             container.innerHTML = '<p style="color: #999; padding: 10px;">No expense items added yet. Add one using the form above.</p>';
             document.getElementById('expenseTotalAmount').textContent = '₹0.00';
+            document.getElementById('categoryTotalAmount').textContent = '₹0.00';
             return;
         }
 
-        let totalAmount = 0;
+        let basicExpensesTotal = 0;
+        let categoryAllocationsTotal = 0;
+
         container.innerHTML = items.map((item, index) => {
-            totalAmount += item.amount;
+            const amount = parseFloat(item.amount) || 0;
+            const typeLabel = item.type === 'category' ? 'Category' : 'Expense';
+            const typeColor = item.type === 'category' ? '#764ba2' : '#667eea';
+            
+            if (item.type === 'category') {
+                categoryAllocationsTotal += amount;
+            } else {
+                basicExpensesTotal += amount;
+            }
+
             return `
                 <div class="expense-item">
-                    <div class="expense-item-name">${item.name}</div>
-                    <div class="expense-item-amount">₹${parseFloat(item.amount).toFixed(2)}</div>
+                    <div class="expense-item-name">${item.name} <span style="font-size: 0.8em; color: ${typeColor};">(${typeLabel})</span></div>
+                    <div class="expense-item-amount">₹${amount.toFixed(2)}</div>
                     <div class="expense-item-actions">
                         <button type="button" class="btn btn-small btn-secondary" onclick="ui.editExpenseItem(${index})">Edit</button>
                         <button type="button" class="btn btn-small btn-danger" onclick="ui.removeExpenseItem(${index})">Remove</button>
@@ -570,116 +575,21 @@ class SavingsUI {
             `;
         }).join('');
 
-        document.getElementById('expenseTotalAmount').textContent = `₹${totalAmount.toFixed(2)}`;
-    }
-
-    renderCategories() {
-        const container = document.getElementById('categoriesList');
-        const categories = app.getCategories();
-
-        if (categories.length === 0) {
-            container.innerHTML = '<p style="color: #999; padding: 10px;">No categories added yet. Add one using the form above.</p>';
-            document.getElementById('categoryTotalAmount').textContent = '₹0.00';
-            document.getElementById('categoryRemainingAmount').textContent = '₹0.00';
-            return;
-        }
-
-        let totalAllocated = 0;
-        let totalRemaining = 0;
-
-        container.innerHTML = categories.map(category => {
-            totalAllocated += category.allocatedAmount;
-            const remaining = app.getCategoryRemaining(category.id);
-            totalRemaining += remaining;
-
-            let totalSpent = 0;
-            if (Array.isArray(category.expenses)) {
-                category.expenses.forEach(expense => {
-                    totalSpent += parseFloat(expense.amount) || 0;
-                });
-            }
-
-            return `
-                <div class="category-item">
-                    <div class="category-item-name">${category.name}</div>
-                    <div class="category-item-amount">₹${parseFloat(category.allocatedAmount).toFixed(2)}</div>
-                    <div class="category-item-remaining">Remaining: ₹${remaining.toFixed(2)}</div>
-                    <div class="category-item-actions">
-                        <button type="button" class="btn btn-small btn-secondary" onclick="ui.editCategory('${category.id}')">Edit</button>
-                        <button type="button" class="btn btn-small btn-danger" onclick="ui.removeCategory('${category.id}')">Remove</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        document.getElementById('categoryTotalAmount').textContent = `₹${totalAllocated.toFixed(2)}`;
-        document.getElementById('categoryRemainingAmount').textContent = `₹${totalRemaining.toFixed(2)}`;
-    }
-
-    renderCategoryExpenses() {
-        const container = document.getElementById('categoryExpensesSection');
-        const categories = app.getCategories();
-
-        if (categories.length === 0) {
-            container.innerHTML = '<p style="color: #999;">No categories configured. Add categories in Month Setup tab.</p>';
-            return;
-        }
-
-        container.innerHTML = categories.map(category => {
-            const expenses = app.getCategoryExpenses(category.id);
-            let totalSpent = 0;
-
-            expenses.forEach(expense => {
-                totalSpent += parseFloat(expense.amount) || 0;
-            });
-
-            const remaining = app.getCategoryRemaining(category.id);
-            const percentageUsed = category.allocatedAmount > 0 ? (totalSpent / category.allocatedAmount * 100) : 0;
-
-            return `
-                <div class="category-expense-card">
-                    <div class="category-expense-header">
-                        <span class="category-expense-title">${category.name}</span>
-                        <span style="color: #667eea; font-weight: bold;">₹${remaining.toFixed(2)} left</span>
-                    </div>
-                    <div class="category-expense-progress">
-                        <div class="category-progress-bar">
-                            <div class="category-progress-bar-container">
-                                <div class="category-progress-fill" style="width: ${Math.min(percentageUsed, 100)}%"></div>
-                            </div>
-                            <small>Spent ₹${totalSpent.toFixed(2)} of ₹${category.allocatedAmount.toFixed(2)}</small>
-                        </div>
-                    </div>
-                    <div class="category-expense-input">
-                        <div class="form-group">
-                            <label>Add Expense:</label>
-                            <input type="number" id="categoryExpenseFormal_${category.id}" min="0" step="0.01" placeholder="Amount (₹)">
-                        </div>
-                        <button type="button" class="btn btn-primary btn-small" onclick="ui.addCategoryExpense('${category.id}')">+ Add</button>
-                    </div>
-                    <div class="category-expense-list">
-                        ${expenses.length === 0 ? '<p style="color: #999; font-size: 0.9em;">No expenses yet</p>' : expenses.map(expense => `
-                            <div class="category-expense-item">
-                                <span>${expense.date} ${expense.description ? '- ' + expense.description : ''}</span>
-                                <span class="category-expense-item-amount">₹${parseFloat(expense.amount).toFixed(2)}</span>
-                                <button type="button" class="btn-tiny" onclick="ui.removeCategoryExpense('${category.id}', '${expense.id}')">Delete</button>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        document.getElementById('expenseTotalAmount').textContent = `₹${basicExpensesTotal.toFixed(2)}`;
+        document.getElementById('categoryTotalAmount').textContent = `₹${categoryAllocationsTotal.toFixed(2)}`;
     }
 
     handleAddExpenseItem() {
         const nameInput = document.getElementById('newExpenseName');
         const amountInput = document.getElementById('newExpenseAmount');
+        const typeSelect = document.getElementById('newExpenseType');
 
         const name = nameInput.value.trim();
         const amount = parseFloat(amountInput.value) || 0;
+        const type = typeSelect.value;
 
         if (!name) {
-            alert('Please enter an expense type');
+            alert('Please enter a name');
             return;
         }
 
@@ -688,9 +598,10 @@ class SavingsUI {
             return;
         }
 
-        app.addExpenseItem(name, amount);
+        app.addExpenseItem(name, amount, type);
         nameInput.value = '';
         amountInput.value = '';
+        typeSelect.value = 'expense'; // Reset to default
         this.renderExpenseItems();
         this.updateCalculatedValues();
     }
@@ -708,7 +619,7 @@ class SavingsUI {
         if (index < 0 || index >= items.length) return;
 
         const item = items[index];
-        const newName = prompt('Edit expense type:', item.name);
+        const newName = prompt('Edit name:', item.name);
         if (newName === null) return;
 
         const newAmount = prompt('Edit amount (₹):', item.amount.toString());
@@ -720,89 +631,17 @@ class SavingsUI {
             return;
         }
 
-        app.updateExpenseItem(index, newName, amountNum);
+        const currentType = item.type || 'expense';
+        const newType = prompt('Edit type (expense/category):', currentType);
+        if (newType === null) return;
+
+        if (newType !== 'expense' && newType !== 'category') {
+            alert('Type must be either "expense" or "category"');
+            return;
+        }
+
+        app.updateExpenseItem(index, newName, amountNum, newType);
         this.renderExpenseItems();
-        this.updateCalculatedValues();
-    }
-
-    handleAddCategory() {
-        const nameInput = document.getElementById('newCategoryName');
-        const amountInput = document.getElementById('newCategoryAmount');
-
-        const name = nameInput.value.trim();
-        const amount = parseFloat(amountInput.value) || 0;
-
-        if (!name) {
-            alert('Please enter a category name');
-            return;
-        }
-
-        if (amount <= 0) {
-            alert('Please enter a valid allocation amount');
-            return;
-        }
-
-        app.addCategory(name, amount);
-        nameInput.value = '';
-        amountInput.value = '';
-        this.renderCategories();
-        this.renderCategoryExpenses();
-        this.updateCalculatedValues();
-    }
-
-    removeCategory(categoryId) {
-        if (confirm('Are you sure you want to remove this category? All expenses in it will be deleted.')) {
-            app.removeCategory(categoryId);
-            this.renderCategories();
-            this.renderCategoryExpenses();
-            this.updateCalculatedValues();
-        }
-    }
-
-    editCategory(categoryId) {
-        const categories = app.getCategories();
-        const category = categories.find(c => c.id === categoryId);
-        if (!category) return;
-
-        const newName = prompt('Edit category name:', category.name);
-        if (newName === null) return;
-
-        const newAmount = prompt('Edit allocation amount (₹):', category.allocatedAmount.toString());
-        if (newAmount === null) return;
-
-        const amountNum = parseFloat(newAmount);
-        if (isNaN(amountNum) || amountNum < 0) {
-            alert('Please enter a valid amount');
-            return;
-        }
-
-        app.updateCategory(categoryId, newName, amountNum);
-        this.renderCategories();
-        this.renderCategoryExpenses();
-        this.updateCalculatedValues();
-    }
-
-    addCategoryExpense(categoryId) {
-        const expenseInput = document.getElementById(`categoryExpenseFormal_${categoryId}`);
-        if (!expenseInput) return;
-
-        const amount = parseFloat(expenseInput.value) || 0;
-        if (amount <= 0) {
-            alert('Please enter a valid expense amount');
-            return;
-        }
-
-        app.addCategoryExpense(categoryId, amount, '');
-        expenseInput.value = '';
-        this.renderCategoryExpenses();
-        this.renderDailyTracker();
-        this.updateCalculatedValues();
-    }
-
-    removeCategoryExpense(categoryId, expenseId) {
-        app.removeCategoryExpense(categoryId, expenseId);
-        this.renderCategoryExpenses();
-        this.renderDailyTracker();
         this.updateCalculatedValues();
     }
 
@@ -811,18 +650,18 @@ class SavingsUI {
         const basicExp = parseFloat(document.getElementById('basicExpenses').value) || 0;
         const investments = parseFloat(document.getElementById('investments').value) || 0;
         const days = parseInt(document.getElementById('daysInMonth').value) || 30;
-        const categoryRemaining = app.getTotalCategoryRemaining();
+        const categoryAllocations = app.currentMonth?.categoryAllocations || 0;
         const monthlyInvestmentRemaining = app.currentMonth?.monthlyInvestments?.remainingAmount || 0;
 
         // Base remaining after basic expenses & investments
         const baseRemaining = income - basicExp - investments;
         
-        // Total available including category and investment remaining
-        const totalAvailable = baseRemaining + categoryRemaining + monthlyInvestmentRemaining;
+        // Total available including category allocations and investment remaining
+        const totalAvailable = baseRemaining + categoryAllocations + monthlyInvestmentRemaining;
         const dailyLimit = totalAvailable / days;
 
         document.getElementById('calcRemaining').textContent = `₹${baseRemaining.toFixed(2)}`;
-        document.getElementById('calcCategoryRemaining').textContent = `₹${categoryRemaining.toFixed(2)}`;
+        document.getElementById('calcCategoryRemaining').textContent = `₹${categoryAllocations.toFixed(2)}`;
         document.getElementById('calcInvestmentRemaining').textContent = `₹${monthlyInvestmentRemaining.toFixed(2)}`;
         document.getElementById('calcDailyLimit').textContent = `₹${dailyLimit.toFixed(2)}`;
 
