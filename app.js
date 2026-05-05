@@ -294,7 +294,10 @@ class SavingsApp {
         // Add remaining amounts from all categories
         const categoryRemaining = this.getTotalCategoryRemaining();
         
-        return available + categoryRemaining;
+        // Add remaining monthly investment amounts if any
+        const monthlyInvestmentRemaining = this.currentMonth.monthlyInvestments?.remainingAmount || 0;
+        
+        return available + categoryRemaining + monthlyInvestmentRemaining;
     }
 
     /**

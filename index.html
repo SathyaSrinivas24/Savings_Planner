@@ -127,7 +127,7 @@
 
                     <div class="form-section">
                         <h3>Monthly Expenses Breakdown</h3>
-                        <p class="note">Add detailed expense items to track what you spend on (rent, utilities, food, etc.)</p>
+                        <p class="note">Add detailed expense items (rent, utilities, food, etc.) and categories (car loan, house rent, home expenses) to track what you spend on. Category remaining amounts and monthly investment remaining amounts add to daily spending limit.</p>
                         
                         <div class="expense-input-row">
                             <div class="form-group">
@@ -146,17 +146,9 @@
                         <div id="expenseTotal" class="info-box" style="margin-top: 20px;">
                             <h4>Total Monthly Expenses: <span id="expenseTotalAmount">₹0.00</span></h4>
                         </div>
-                    </div>
 
-                    <div class="form-section">
-                        <h3>Savings Goal Allocation</h3>
-                        <p class="note">Allocate how daily surplus is distributed to your savings goals</p>
-                        <div id="savingsGoalsContainer"></div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Category-Based Expense Allocation</h3>
-                        <p class="note">Add categories (e.g., Car Loan, House Rent, Home Expenses) and allocate budgets. Track expenses against these allocations. Remaining amounts add to daily spending limit.</p>
+                        <h4 style="margin-top: 30px; margin-bottom: 15px;">Category-Based Expense Allocation</h4>
+                        <p class="note" style="margin-bottom: 15px;">Add categories with allocated budgets. Track expenses against these allocations. Remaining amounts add to daily spending limit.</p>
                         
                         <div class="expense-input-row">
                             <div class="form-group">
@@ -186,6 +178,8 @@
                     <div id="calculatedValues" class="info-box" style="display: none;">
                         <h4>Calculated Values:</h4>
                         <p>Remaining after basic expenses & investments: <strong id="calcRemaining">₹0</strong></p>
+                        <p>Plus category remaining: <strong id="calcCategoryRemaining">₹0</strong></p>
+                        <p>Plus monthly investment remaining: <strong id="calcInvestmentRemaining">₹0</strong></p>
                         <p>Daily spending limit: <strong id="calcDailyLimit">₹0</strong>/day</p>
                         <p>Total Spent (up to today): <strong id="calcTotalSpend">₹0</strong></p>
                         <p>Monthly Investment: <strong id="calcTotalInv">₹0</strong></p>

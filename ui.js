@@ -812,12 +812,18 @@ class SavingsUI {
         const investments = parseFloat(document.getElementById('investments').value) || 0;
         const days = parseInt(document.getElementById('daysInMonth').value) || 30;
         const categoryRemaining = app.getTotalCategoryRemaining();
+        const monthlyInvestmentRemaining = app.currentMonth?.monthlyInvestments?.remainingAmount || 0;
 
-        // Available = Income - Basic Expenses - Investments + Category Remaining
-        const remaining = income - basicExp - investments + categoryRemaining;
-        const dailyLimit = remaining / days;
+        // Base remaining after basic expenses & investments
+        const baseRemaining = income - basicExp - investments;
+        
+        // Total available including category and investment remaining
+        const totalAvailable = baseRemaining + categoryRemaining + monthlyInvestmentRemaining;
+        const dailyLimit = totalAvailable / days;
 
-        document.getElementById('calcRemaining').textContent = `₹${remaining.toFixed(2)}`;
+        document.getElementById('calcRemaining').textContent = `₹${baseRemaining.toFixed(2)}`;
+        document.getElementById('calcCategoryRemaining').textContent = `₹${categoryRemaining.toFixed(2)}`;
+        document.getElementById('calcInvestmentRemaining').textContent = `₹${monthlyInvestmentRemaining.toFixed(2)}`;
         document.getElementById('calcDailyLimit').textContent = `₹${dailyLimit.toFixed(2)}`;
 
         // Display total spend and investment
