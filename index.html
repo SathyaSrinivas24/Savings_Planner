@@ -77,6 +77,11 @@
                         <p>No entry for today yet</p>
                     </div>
 
+                    <h3 style="margin-top: 2rem;">Category Expenses</h3>
+                    <div id="categoryExpensesSection" class="category-expenses-section">
+                        <p style="color: #999;">No categories configured. Add categories in Month Setup tab.</p>
+                    </div>
+
                     <h3 style="margin-top: 2rem;">Recent Entries (Last 7 Days)</h3>
                     <div id="recentEntries" class="entries-list"></div>
                 </div>
@@ -147,6 +152,30 @@
                         <h3>Savings Goal Allocation</h3>
                         <p class="note">Allocate how daily surplus is distributed to your savings goals</p>
                         <div id="savingsGoalsContainer"></div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Category-Based Expense Allocation</h3>
+                        <p class="note">Add categories (e.g., Car Loan, House Rent, Home Expenses) and allocate budgets. Track expenses against these allocations. Remaining amounts add to daily spending limit.</p>
+                        
+                        <div class="expense-input-row">
+                            <div class="form-group">
+                                <label for="newCategoryName">Category Name:</label>
+                                <input type="text" id="newCategoryName" placeholder="e.g., Car Loan, House Rent">
+                            </div>
+                            <div class="form-group">
+                                <label for="newCategoryAmount">Allocated Amount (₹):</label>
+                                <input type="number" id="newCategoryAmount" min="0" step="0.01" placeholder="0.00">
+                            </div>
+                            <button type="button" id="addCategoryBtn" class="btn btn-primary" style="align-self: flex-end; margin-bottom: 0;">+ Add Category</button>
+                        </div>
+
+                        <div id="categoriesList" class="categories-list-container"></div>
+
+                        <div id="categoryTotal" class="info-box" style="margin-top: 20px;">
+                            <h4>Total Category Allocations: <span id="categoryTotalAmount">₹0.00</span></h4>
+                            <p style="margin-top: 10px; font-size: 0.9em;">Remaining in All Categories: <span id="categoryRemainingAmount" style="font-weight: bold;">₹0.00</span></p>
+                        </div>
                     </div>
 
                     <div class="button-group">
