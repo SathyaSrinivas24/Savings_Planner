@@ -117,6 +117,11 @@ class SavingsApp {
                 previousMonthCarryover: 0,
                 investments: [] // Array of {name, units, amount, total}
             },
+            flexibleCarryForward: {
+                previousAmount: 0,
+                appliedToIncome: false,
+                generatedAmount: 0
+            },
             createdAt: new Date().toISOString().split('T')[0]
         };
     }
@@ -154,11 +159,39 @@ class SavingsApp {
             }
         });
 
+        // Ensure savingsGoals is initialized with defaults if missing
+        if (!Array.isArray(month.savingsGoals) || month.savingsGoals.length === 0) {
+            month.savingsGoals = [
+                { name: 'Emergency', percentage: 33.33 },
+                { name: 'Travel', percentage: 33.33 },
+                { name: 'Investment Account', percentage: 33.34 }
+            ];
+        }
+
+        // Ensure totalSavingsAllocated is initialized
+        if (!month.totalSavingsAllocated) {
+            month.totalSavingsAllocated = {};
+            month.savingsGoals.forEach(goal => {
+                month.totalSavingsAllocated[goal.name] = 0;
+            });
+        }
+
         month.monthlyInvestments.investments = month.monthlyInvestments.investments || [];
         month.dailyExpenseInvestments.investments = month.dailyExpenseInvestments.investments || [];
         month.monthlyInvestments.allocatedAmount = parseFloat(month.monthlyInvestments.allocatedAmount) || parseFloat(month.investments) || 0;
         month.monthlyInvestments.previousMonthCarryover = parseFloat(month.monthlyInvestments.previousMonthCarryover) || 0;
         month.dailyExpenseInvestments.previousMonthCarryover = parseFloat(month.dailyExpenseInvestments.previousMonthCarryover) || 0;
+
+        if (!month.flexibleCarryForward) {
+            month.flexibleCarryForward = {
+                previousAmount: parseFloat(month.flexibleCarryForwardAmount) || 0,
+                appliedToIncome: false,
+                generatedAmount: 0
+            };
+        }
+        month.flexibleCarryForward.previousAmount = parseFloat(month.flexibleCarryForward.previousAmount) || 0;
+        month.flexibleCarryForward.generatedAmount = parseFloat(month.flexibleCarryForward.generatedAmount) || 0;
+        month.flexibleCarryForward.appliedToIncome = Boolean(month.flexibleCarryForward.appliedToIncome);
     }
 
     normalizeAllMonths() {
@@ -189,6 +222,7 @@ class SavingsApp {
             newMonth.monthlyInvestments.allocatedAmount = previousMonth.investments || 0;
             newMonth.monthlyInvestments.previousMonthCarryover = previousMonth.monthlyInvestments?.remainingAmount || 0;
             newMonth.dailyExpenseInvestments.previousMonthCarryover = previousMonth.dailyExpenseInvestments?.remainingAmount || 0;
+            newMonth.flexibleCarryForward.previousAmount = this.getFlexibleCarryForwardAmount(previousMonth);
             this.recalculateInvestmentStatsForMonth(newMonth);
         }
         this.data.months.push(newMonth);
@@ -207,6 +241,7 @@ class SavingsApp {
     setCurrentMonth(monthId) {
         const month = this.data.months.find(m => m.id === monthId);
         if (month) {
+            this.ensureInvestmentStructures(month);
             this.currentMonth = month;
             this.data.currentMonthId = monthId;
             this.saveData();
@@ -254,6 +289,12 @@ class SavingsApp {
             investments: []
         };
 
+        target.flexibleCarryForward = {
+            previousAmount: this.getFlexibleCarryForwardAmount(source),
+            appliedToIncome: false,
+            generatedAmount: 0
+        };
+
         this.recalculateInvestmentStatsForMonth(target);
         this.saveData();
         return true;
@@ -290,14 +331,11 @@ class SavingsApp {
             this.currentMonth.basicExpenses -
             this.currentMonth.investments
         );
-        
-        // Add remaining amounts from category allocations
-        const categoryRemaining = this.getTotalCategoryRemaining();
-        
+
         // Add remaining monthly investment amounts if any
         const monthlyInvestmentRemaining = this.currentMonth.monthlyInvestments?.remainingAmount || 0;
         
-        return available + categoryRemaining + monthlyInvestmentRemaining;
+        return available + monthlyInvestmentRemaining;
     }
 
     /**
@@ -324,11 +362,58 @@ class SavingsApp {
      */
     getCategoryRemaining(categoryItem) {
         if (!categoryItem || categoryItem.type !== 'category') return 0;
-        
-        // For now, categories don't have individual expenses tracking
-        // They just have allocated amounts that can be spent throughout the month
-        // In a future enhancement, we could add expense tracking per category
-        return categoryItem.amount || 0;
+
+        const allocated = parseFloat(categoryItem.amount) || 0;
+        const spent = this.getCategorySpent(categoryItem.name);
+        return Math.max(0, allocated - spent);
+    }
+
+    getCategorySpent(categoryName) {
+        if (!this.currentMonth || !categoryName) return 0;
+
+        return (this.currentMonth.dailyEntries || []).reduce((total, entry) => {
+            const categoryExpenses = entry.categoryExpenses || {};
+            return total + (parseFloat(categoryExpenses[categoryName]) || 0);
+        }, 0);
+    }
+
+    getTotalCategoryRemainingForMonth(month = this.currentMonth) {
+        if (!month || !Array.isArray(month.expenseItems)) return 0;
+
+        return month.expenseItems.reduce((total, item) => {
+            const allocated = parseFloat(item.amount) || 0;
+            const spent = this.getCategorySpentForMonth(month, item.name);
+            return total + Math.max(0, allocated - spent);
+        }, 0);
+    }
+
+    getCategorySpentForMonth(month, categoryName) {
+        if (!month || !categoryName) return 0;
+
+        return (month.dailyEntries || []).reduce((total, entry) => {
+            const categoryExpenses = entry.categoryExpenses || {};
+            return total + (parseFloat(categoryExpenses[categoryName]) || 0);
+        }, 0);
+    }
+
+    getDailyLimitRemainingForMonth(month = this.currentMonth) {
+        if (!month) return 0;
+
+        return (month.dailyEntries || []).reduce((total, entry) => {
+            const remaining = (parseFloat(entry.dailyLimit) || 0) - (parseFloat(entry.expenseAmount) || 0);
+            return total + Math.max(0, remaining);
+        }, 0);
+    }
+
+    getFlexibleCarryForwardAmount(month = this.currentMonth) {
+        if (!month) return 0;
+
+        const existingCarry = month.flexibleCarryForward?.appliedToIncome
+            ? 0
+            : (parseFloat(month.flexibleCarryForward?.previousAmount) || 0);
+        const generated = this.getDailyLimitRemainingForMonth(month) + this.getTotalCategoryRemainingForMonth(month);
+
+        return existingCarry + generated;
     }
 
     getBaseDailyLimit() {
@@ -451,21 +536,34 @@ class SavingsApp {
     // DAILY ENTRY MANAGEMENT
     // ============================================================
 
-    addDailyEntry(dateStr, expenseAmount) {
+    addDailyEntry(dateStr, expenseAmount, categoryName = 'daily') {
         if (!this.currentMonth) return false;
 
         // Check if entry exists for this date and add to it (allow multiple entries)
         let existingEntry = this.currentMonth.dailyEntries.find(e => e.date === dateStr);
-        const totalExpenseForDate = existingEntry 
-            ? existingEntry.expenseAmount + expenseAmount 
-            : expenseAmount;
+        const isDailySpend = categoryName === 'daily';
+        const totalExpenseForDate = isDailySpend
+            ? (existingEntry ? existingEntry.expenseAmount + expenseAmount : expenseAmount)
+            : (existingEntry ? existingEntry.expenseAmount : 0);
+        const categoryExpenses = { ...(existingEntry?.categoryExpenses || {}) };
+
+        if (!isDailySpend) {
+            categoryExpenses[categoryName] = (parseFloat(categoryExpenses[categoryName]) || 0) + expenseAmount;
+        }
 
         this.currentMonth.dailyEntries = this.currentMonth.dailyEntries.filter(
             e => e.date !== dateStr
         );
 
-        // Process the total expense for this date
-        const result = this.processDailyExpense(dateStr, totalExpenseForDate);
+        // Process only daily-limit spending. Category-only entries should not create surplus.
+        const result = totalExpenseForDate > 0
+            ? this.processDailyExpense(dateStr, totalExpenseForDate)
+            : {
+                todayLimit: this.getTodayDailyLimit(dateStr),
+                debtAccrued: 0,
+                debtRepaid: 0,
+                surplus: 0
+            };
 
         // Allocate surplus to goals
         const allocation = this.allocateSurplus(result.surplus);
@@ -479,6 +577,7 @@ class SavingsApp {
             debtRepaid: result.debtRepaid,
             surplus: result.surplus,
             savingsAllocation: allocation,
+            categoryExpenses,
             timestamp: new Date().toISOString()
         };
 
@@ -499,11 +598,11 @@ class SavingsApp {
     updateTotalSavingsAllocated() {
         if (!this.currentMonth) return;
 
-        const totals = {
-            'Emergency': 0,
-            'Travel': 0,
-            'Investment Account': 0
-        };
+        // Initialize totals based on current month's savingsGoals
+        const totals = {};
+        (this.currentMonth.savingsGoals || []).forEach(goal => {
+            totals[goal.name] = 0;
+        });
 
         this.currentMonth.dailyEntries.forEach(entry => {
             Object.keys(entry.savingsAllocation || {}).forEach(goalName => {
@@ -684,13 +783,13 @@ class SavingsApp {
     // EXPENSE ITEMS MANAGEMENT
     // ============================================================
 
-    addExpenseItem(name, amount, type = 'expense') {
+    addExpenseItem(name, amount) {
         if (!this.currentMonth) return false;
 
         const item = {
             name: name.trim(),
             amount: parseFloat(amount) || 0,
-            type: type, // 'expense' or 'category'
+            type: 'category',
             addedAt: new Date().toISOString()
         };
 
@@ -732,21 +831,16 @@ class SavingsApp {
         if (!this.currentMonth) return;
 
         let basicExpenses = 0;
-        let categoryAllocations = 0;
 
         if (this.currentMonth.expenseItems && Array.isArray(this.currentMonth.expenseItems)) {
             this.currentMonth.expenseItems.forEach(item => {
                 const amount = parseFloat(item.amount) || 0;
-                if (item.type === 'category') {
-                    categoryAllocations += amount;
-                } else {
-                    basicExpenses += amount;
-                }
+                basicExpenses += amount;
             });
         }
 
         this.currentMonth.basicExpenses = basicExpenses;
-        this.currentMonth.categoryAllocations = categoryAllocations;
+        this.currentMonth.categoryAllocations = 0;
     }
 
     getExpenseItems(type = null) {
@@ -958,12 +1052,23 @@ class SavingsApp {
     updateMonthConfig(config) {
         if (!this.currentMonth) return false;
 
-        this.currentMonth.income = parseFloat(config.income) || 0;
+        this.currentMonth.flexibleCarryForward = this.currentMonth.flexibleCarryForward || {
+            previousAmount: 0,
+            appliedToIncome: false,
+            generatedAmount: 0
+        };
+        const baseIncome = parseFloat(config.income) || 0;
+        const carryForwardAmount = parseFloat(this.currentMonth.flexibleCarryForward.previousAmount) || 0;
+        const applyFlexibleCarryForward = Boolean(config.applyFlexibleCarryForward);
+
+        this.currentMonth.income = baseIncome + (applyFlexibleCarryForward ? carryForwardAmount : 0);
+        this.currentMonth.flexibleCarryForward.appliedToIncome = applyFlexibleCarryForward;
         // basicExpenses is auto-calculated from expenseItems
         this.currentMonth.investments = parseFloat(config.investments) || 0;
         this.currentMonth.daysInMonth = parseInt(config.daysInMonth) || 30;
         this.currentMonth.penaltyPercentage = parseFloat(config.penaltyPercentage) || 50;
         this.currentMonth.savingsGoals = config.savingsGoals || this.currentMonth.savingsGoals;
+        this.currentMonth.flexibleCarryForward.generatedAmount = this.getFlexibleCarryForwardAmount(this.currentMonth);
 
         // Update monthly investments allocated amount
         this.setMonthlyInvestmentAllocated(this.currentMonth.investments);

@@ -234,6 +234,24 @@ header h1 {
     transition: border-color 0.3s ease;
 }
 
+.form-group select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: #fff;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #667eea 50%),
+        linear-gradient(135deg, #667eea 50%, transparent 50%);
+    background-position:
+        calc(100% - 20px) 50%,
+        calc(100% - 14px) 50%;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    color: #333;
+    cursor: pointer;
+    min-height: 48px;
+    padding-right: 44px;
+}
+
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
@@ -314,6 +332,38 @@ header h1 {
     margin-top: 30px;
 }
 
+.carry-forward-box {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: center;
+    padding: 14px 16px;
+    background: #fff;
+    border: 2px solid #e6e9ff;
+    border-radius: 8px;
+    margin-top: 15px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 6px;
+}
+
+.checkbox-label input {
+    width: auto;
+    accent-color: #667eea;
+}
+
+.carry-forward-total {
+    color: #667eea;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .info-box {
     background: #e8f4f8;
     border-left: 4px solid #3498db;
@@ -323,7 +373,6 @@ header h1 {
 }
 
 .info-box h4 {
-    margin-bottom: 10px;
     color: #2c3e50;
 }
 
@@ -332,16 +381,32 @@ header h1 {
     color: #555;
 }
 
+/* Savings Goals Container */
+.savings-goals-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 50px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
 /* Savings Goals Input */
 .goal-input-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
-    margin-bottom: 15px;
-    padding: 15px;
+    margin-bottom: 0;
+    padding: 8px 15px;
     background: white;
     border-radius: 6px;
     align-items: center;
+}
+
+.goal-input-row .form-group {
+    margin-bottom: 0;
 }
 
 .goal-input-row input {
@@ -695,6 +760,15 @@ header h1 {
 
     #loadFileBtn {
         width: 100%;
+    }
+
+    .carry-forward-box {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .carry-forward-total {
+        white-space: normal;
     }
 
     header h1 {

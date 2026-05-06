@@ -48,9 +48,14 @@ class SavingsUI {
     setCurrentMonthAutomatically() {
         const today = new Date();
         const currentMonthId = app.getMonthId(today);
+        const previousMonthId = app.data.currentMonthId;
         
         // If month changed, update it
-        if (app.data.currentMonthId !== currentMonthId) {
+        if (previousMonthId !== currentMonthId) {
+            const previousMonth = app.data.months.find(m => m.id === previousMonthId)
+                || app.getPreviousMonthBefore(currentMonthId);
+            this.autoExportPreviousMonth(previousMonth, currentMonthId);
+
             const monthExists = app.data.months.find(m => m.id === currentMonthId);
             if (!monthExists) {
                 // Auto-create current month if doesn't exist
@@ -59,6 +64,23 @@ class SavingsUI {
                 app.setCurrentMonth(currentMonthId);
             }
         }
+    }
+
+    autoExportPreviousMonth(previousMonth, currentMonthId) {
+        if (!previousMonth) return;
+
+        const exportKey = `autoExportedPreviousMonth:${previousMonth.id}:for:${currentMonthId}`;
+        if (localStorage.getItem(exportKey)) return;
+
+        localStorage.setItem(exportKey, 'true');
+        this.downloadJSON(
+            {
+                exportedAt: new Date().toISOString(),
+                reason: 'Automatic export when month changed',
+                month: previousMonth
+            },
+            `savings-${previousMonth.id}-auto-export.json`
+        );
     }
 
     render() {
@@ -104,6 +126,11 @@ class SavingsUI {
 
         // Month Setup Form
         document.getElementById('monthSetupForm').addEventListener('submit', (e) => this.handleMonthSetup(e));
+        ['income', 'investments', 'daysInMonth', 'applyFlexibleCarryForward'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) input.addEventListener('input', () => this.updateCalculatedValues());
+            if (input) input.addEventListener('change', () => this.updateCalculatedValues());
+        });
 
         // Add Expense Item Button
         document.getElementById('addExpenseItemBtn').addEventListener('click', () => this.handleAddExpenseItem());
@@ -291,6 +318,7 @@ class SavingsUI {
 
         // Month is configured - enable form
         this.disableDailyTrackerForm(false);
+        this.renderExpenseCategoryOptions();
 
         // Update stats for today (base calculation) - use local date, not UTC
         const todayDate = new Date();
@@ -338,6 +366,7 @@ class SavingsUI {
     disableDailyTrackerForm(disabled) {
         const expenseForm = document.getElementById('expenseForm');
         const dateInput = document.getElementById('expenseDate');
+        const categoryInput = document.getElementById('expenseCategory');
         const amountInput = document.getElementById('expenseAmount');
         const submitBtn = expenseForm?.querySelector('button[type="submit"]');
         const statsSection = document.querySelector('.stats-section');
@@ -346,6 +375,7 @@ class SavingsUI {
         if (disabled) {
             // Disable all form elements
             dateInput.disabled = true;
+            if (categoryInput) categoryInput.disabled = true;
             amountInput.disabled = true;
             if (submitBtn) submitBtn.disabled = true;
 
@@ -368,6 +398,7 @@ class SavingsUI {
         } else {
             // Enable all form elements
             dateInput.disabled = false;
+            if (categoryInput) categoryInput.disabled = false;
             amountInput.disabled = false;
             if (submitBtn) submitBtn.disabled = false;
 
@@ -385,6 +416,27 @@ class SavingsUI {
         }
     }
 
+    renderExpenseCategoryOptions() {
+        const select = document.getElementById('expenseCategory');
+        if (!select) return;
+
+        const selectedValue = select.value || 'daily';
+        const categories = app.getExpenseItems();
+
+        select.innerHTML = `
+            <option value="daily">Daily Spend</option>
+            ${categories.map(item => {
+                const name = this.escapeHTML(item.name);
+                const remaining = app.getCategoryRemaining(item).toFixed(2);
+                return `<option value="${name}">${name} (₹${remaining} left)</option>`;
+            }).join('')}
+        `;
+
+        if (Array.from(select.options).some(option => option.value === selectedValue)) {
+            select.value = selectedValue;
+        }
+    }
+
     /**
      * Helper function to render selected date entry
      */
@@ -393,14 +445,19 @@ class SavingsUI {
         const container = document.getElementById('todayEntry');
 
         if (entry) {
-            const allocationStr = Object.entries(entry.savingsAllocation)
+            const allocationStr = Object.entries(entry.savingsAllocation || {})
                 .map(([goal, amount]) => `${goal}: ₹${amount.toFixed(2)}`)
+                .join(' | ');
+            const categoryStr = Object.entries(entry.categoryExpenses || {})
+                .filter(([, amount]) => amount > 0)
+                .map(([name, amount]) => `${name}: ₹${amount.toFixed(2)}`)
                 .join(' | ');
 
             container.innerHTML = `
                 <div>
                     <div class="entry-date">${selectedDate}</div>
-                    <div style="color: #f5576c; font-weight: bold;">Spent: ₹${entry.expenseAmount.toFixed(2)}</div>
+                    <div style="color: #f5576c; font-weight: bold;">Daily Spend: ₹${entry.expenseAmount.toFixed(2)}</div>
+                    ${categoryStr ? `<div style="color: #667eea; font-weight: bold;">Category Spend: ${categoryStr}</div>` : ''}
                     <div style="color: #666; font-size: 0.9em;">Limit: ₹${entry.dailyLimit.toFixed(2)}</div>
                     ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved: ₹${entry.surplus.toFixed(2)}</div>` : ''}
                     ${entry.debtAccrued > 0 ? `<div style="color: #f5576c;">Debt Added: ₹${entry.debtAccrued.toFixed(2)}</div>` : ''}
@@ -454,7 +511,8 @@ class SavingsUI {
             <div class="entry-item">
                 <div>
                     <div class="entry-date">${entry.date}</div>
-                    <div style="color: #f5576c; font-weight: bold;">Spent: ₹${entry.expenseAmount.toFixed(2)}</div>
+                    <div style="color: #f5576c; font-weight: bold;">Daily Spend: ₹${entry.expenseAmount.toFixed(2)}</div>
+                    ${this.formatCategoryExpenses(entry)}
                     <div style="color: #666; font-size: 0.9em;">Limit: ₹${entry.dailyLimit.toFixed(2)}</div>
                     ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved: ₹${entry.surplus.toFixed(2)}</div>` : ''}
                     ${entry.debtAccrued > 0 ? `<div style="color: #f5576c;">Debt Added: ₹${entry.debtAccrued.toFixed(2)}</div>` : ''}
@@ -462,6 +520,25 @@ class SavingsUI {
                 </div>
             </div>
         `).join('');
+    }
+
+    formatCategoryExpenses(entry) {
+        const categoryStr = Object.entries(entry.categoryExpenses || {})
+            .filter(([, amount]) => amount > 0)
+            .map(([name, amount]) => `${name}: ₹${amount.toFixed(2)}`)
+            .join(' | ');
+
+        return categoryStr
+            ? `<div style="color: #667eea; font-weight: bold;">Category Spend: ${categoryStr}</div>`
+            : '';
+    }
+
+    escapeHTML(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     handleExpenseSubmit(e) {
@@ -474,16 +551,18 @@ class SavingsUI {
         }
 
         const dateStr = document.getElementById('expenseDate').value;
+        const categoryName = document.getElementById('expenseCategory')?.value || 'daily';
         const amount = parseFloat(document.getElementById('expenseAmount').value);
 
-        if (!dateStr || amount < 0) {
+        if (!dateStr || !Number.isFinite(amount) || amount <= 0) {
             alert('Please enter valid date and amount');
             return;
         }
 
-        app.addDailyEntry(dateStr, amount);
+        app.addDailyEntry(dateStr, amount, categoryName);
         document.getElementById('expenseForm').reset();
         this.setTodayDate();
+        this.renderExpenseCategoryOptions();
         this.renderDailyTracker();
         this.renderMonthOverview();
 
@@ -498,8 +577,12 @@ class SavingsUI {
         if (!app.currentMonth) return;
 
         const month = app.currentMonth;
+        const flexibleCarryForward = parseFloat(month.flexibleCarryForward?.previousAmount) || 0;
+        const displayedIncome = month.flexibleCarryForward?.appliedToIncome
+            ? Math.max(0, (parseFloat(month.income) || 0) - flexibleCarryForward)
+            : (month.income || '');
 
-        document.getElementById('income').value = month.income || '';
+        document.getElementById('income').value = displayedIncome;
         document.getElementById('basicExpenses').value = month.basicExpenses || '';
         document.getElementById('investments').value = month.investments || '';
         document.getElementById('daysInMonth').value = month.daysInMonth || 30;
@@ -510,6 +593,11 @@ class SavingsUI {
             penaltyInput.value = month.penaltyPercentage || 50;
         }
 
+        const applyCarryForward = document.getElementById('applyFlexibleCarryForward');
+        if (applyCarryForward) {
+            applyCarryForward.checked = Boolean(month.flexibleCarryForward?.appliedToIncome);
+        }
+
         this.renderExpenseItems();
         this.renderSavingsGoalsInput();
         this.updateCalculatedValues();
@@ -517,7 +605,18 @@ class SavingsUI {
 
     renderSavingsGoalsInput() {
         const container = document.getElementById('savingsGoalsContainer');
-        const goals = app.currentMonth.savingsGoals || [];
+        if (!container) {
+            console.warn('savingsGoalsContainer not found in DOM');
+            return;
+        }
+
+        const goals = app.currentMonth?.savingsGoals || [];
+        console.log('Rendering savings goals:', goals);
+        
+        if (goals.length === 0) {
+            container.innerHTML = '<p style="color: #999; padding: 10px;">No savings goals configured</p>';
+            return;
+        }
 
         container.innerHTML = goals.map((goal, index) => `
             <div class="goal-input-row">
@@ -540,33 +639,31 @@ class SavingsUI {
 
     renderExpenseItems() {
         const container = document.getElementById('expenseItemsList');
+        app.updateExpenseTotals();
         const items = app.getExpenseItems();
+        const basicExpensesInput = document.getElementById('basicExpenses');
+        const categoryAllocationsTotal = document.getElementById('totalCategoryAllocations');
 
         if (items.length === 0) {
             container.innerHTML = '<p style="color: #999; padding: 10px;">No expense items added yet. Add one using the form above.</p>';
-            document.getElementById('expenseTotalAmount').textContent = '₹0.00';
-            document.getElementById('categoryTotalAmount').textContent = '₹0.00';
+            if (basicExpensesInput) basicExpensesInput.value = '0.00';
+            if (categoryAllocationsTotal) categoryAllocationsTotal.textContent = '₹0.00';
             return;
         }
 
         let basicExpensesTotal = 0;
-        let categoryAllocationsTotal = 0;
 
         container.innerHTML = items.map((item, index) => {
             const amount = parseFloat(item.amount) || 0;
-            const typeLabel = item.type === 'category' ? 'Category' : 'Expense';
-            const typeColor = item.type === 'category' ? '#764ba2' : '#667eea';
-            
-            if (item.type === 'category') {
-                categoryAllocationsTotal += amount;
-            } else {
-                basicExpensesTotal += amount;
-            }
+            basicExpensesTotal += amount;
 
             return `
                 <div class="expense-item">
-                    <div class="expense-item-name">${item.name} <span style="font-size: 0.8em; color: ${typeColor};">(${typeLabel})</span></div>
-                    <div class="expense-item-amount">₹${amount.toFixed(2)}</div>
+                    <div class="expense-item-name">${item.name}</div>
+                    <div class="expense-item-amount">
+                        ₹${amount.toFixed(2)}
+                        <small style="display: block; color: #667eea;">Remaining: ₹${app.getCategoryRemaining(item).toFixed(2)}</small>
+                    </div>
                     <div class="expense-item-actions">
                         <button type="button" class="btn btn-small btn-secondary" onclick="ui.editExpenseItem(${index})">Edit</button>
                         <button type="button" class="btn btn-small btn-danger" onclick="ui.removeExpenseItem(${index})">Remove</button>
@@ -575,18 +672,16 @@ class SavingsUI {
             `;
         }).join('');
 
-        document.getElementById('expenseTotalAmount').textContent = `₹${basicExpensesTotal.toFixed(2)}`;
-        document.getElementById('categoryTotalAmount').textContent = `₹${categoryAllocationsTotal.toFixed(2)}`;
+        if (basicExpensesInput) basicExpensesInput.value = basicExpensesTotal.toFixed(2);
+        if (categoryAllocationsTotal) categoryAllocationsTotal.textContent = `₹${basicExpensesTotal.toFixed(2)}`;
     }
 
     handleAddExpenseItem() {
         const nameInput = document.getElementById('newExpenseName');
         const amountInput = document.getElementById('newExpenseAmount');
-        const typeSelect = document.getElementById('newExpenseType');
 
         const name = nameInput.value.trim();
         const amount = parseFloat(amountInput.value) || 0;
-        const type = typeSelect.value;
 
         if (!name) {
             alert('Please enter a name');
@@ -598,11 +693,11 @@ class SavingsUI {
             return;
         }
 
-        app.addExpenseItem(name, amount, type);
+        app.addExpenseItem(name, amount);
         nameInput.value = '';
         amountInput.value = '';
-        typeSelect.value = 'expense'; // Reset to default
         this.renderExpenseItems();
+        this.renderExpenseCategoryOptions();
         this.updateCalculatedValues();
     }
 
@@ -610,6 +705,7 @@ class SavingsUI {
         if (confirm('Are you sure you want to remove this expense item?')) {
             app.removeExpenseItem(index);
             this.renderExpenseItems();
+            this.renderExpenseCategoryOptions();
             this.updateCalculatedValues();
         }
     }
@@ -631,22 +727,17 @@ class SavingsUI {
             return;
         }
 
-        const currentType = item.type || 'expense';
-        const newType = prompt('Edit type (expense/category):', currentType);
-        if (newType === null) return;
-
-        if (newType !== 'expense' && newType !== 'category') {
-            alert('Type must be either "expense" or "category"');
-            return;
-        }
-
-        app.updateExpenseItem(index, newName, amountNum, newType);
+        app.updateExpenseItem(index, newName, amountNum);
         this.renderExpenseItems();
+        this.renderExpenseCategoryOptions();
         this.updateCalculatedValues();
     }
 
     updateCalculatedValues() {
         const income = parseFloat(document.getElementById('income').value) || 0;
+        const applyFlexibleCarryForward = document.getElementById('applyFlexibleCarryForward')?.checked || false;
+        const flexibleCarryForward = parseFloat(app.currentMonth?.flexibleCarryForward?.previousAmount) || 0;
+        const effectiveIncome = income + (applyFlexibleCarryForward ? flexibleCarryForward : 0);
         const basicExp = parseFloat(document.getElementById('basicExpenses').value) || 0;
         const investments = parseFloat(document.getElementById('investments').value) || 0;
         const days = parseInt(document.getElementById('daysInMonth').value) || 30;
@@ -654,12 +745,16 @@ class SavingsUI {
         const monthlyInvestmentRemaining = app.currentMonth?.monthlyInvestments?.remainingAmount || 0;
 
         // Base remaining after basic expenses & investments
-        const baseRemaining = income - basicExp - investments;
+        const baseRemaining = effectiveIncome - basicExp - investments;
         
         // Total available including category allocations and investment remaining
         const totalAvailable = baseRemaining + categoryAllocations + monthlyInvestmentRemaining;
         const dailyLimit = totalAvailable / days;
 
+        const carryForwardDisplay = document.getElementById('flexibleCarryForwardAmount');
+        const effectiveIncomeDisplay = document.getElementById('effectiveIncome');
+        if (carryForwardDisplay) carryForwardDisplay.textContent = `₹${flexibleCarryForward.toFixed(2)}`;
+        if (effectiveIncomeDisplay) effectiveIncomeDisplay.textContent = `₹${effectiveIncome.toFixed(2)}`;
         document.getElementById('calcRemaining').textContent = `₹${baseRemaining.toFixed(2)}`;
         document.getElementById('calcCategoryRemaining').textContent = `₹${categoryAllocations.toFixed(2)}`;
         document.getElementById('calcInvestmentRemaining').textContent = `₹${monthlyInvestmentRemaining.toFixed(2)}`;
@@ -688,15 +783,17 @@ class SavingsUI {
         const investments = parseFloat(document.getElementById('investments').value) || 0;
         const daysInMonth = parseInt(document.getElementById('daysInMonth').value) || 30;
         const penaltyPercentage = parseFloat(document.getElementById('penaltyPercentage')?.value) || 50;
+        const applyFlexibleCarryForward = document.getElementById('applyFlexibleCarryForward')?.checked || false;
 
-        const savingsGoals = Array.from(document.querySelectorAll('.goal-input-row')).map(row => ({
+        const goalRows = Array.from(document.querySelectorAll('.goal-input-row'));
+        const savingsGoals = goalRows.length > 0 ? goalRows.map(row => ({
             name: row.querySelector('.goal-name').value,
-            percentage: parseFloat(row.querySelector('.goal-percentage').value)
-        }));
+            percentage: parseFloat(row.querySelector('.goal-percentage').value) || 0
+        })) : (app.currentMonth.savingsGoals || []);
 
-        // Validate percentages sum to 100
+        // Validate percentages sum to 100 if there are savings goal rows
         const totalPercent = savingsGoals.reduce((sum, goal) => sum + goal.percentage, 0);
-        if (Math.abs(totalPercent - 100) > 0.1) {
+        if (goalRows.length > 0 && Math.abs(totalPercent - 100) > 0.1) {
             alert(`Savings goal percentages must sum to 100%. Current: ${totalPercent.toFixed(2)}%`);
             return;
         }
@@ -707,6 +804,7 @@ class SavingsUI {
             investments,
             daysInMonth,
             penaltyPercentage,
+            applyFlexibleCarryForward,
             savingsGoals
         };
 
@@ -757,18 +855,19 @@ class SavingsUI {
     }
 
     renderGoalsBreakdown() {
-        const breakdown = app.currentMonth.totalSavingsAllocated;
         const container = document.getElementById('goalsBreakdown');
+        const goals = app.currentMonth.savingsGoals || [];
+        const breakdown = app.currentMonth.totalSavingsAllocated || {};
 
-        if (Object.values(breakdown).every(v => v === 0)) {
+        if (goals.length === 0 || Object.values(breakdown).every(v => v === 0)) {
             container.innerHTML = '<p style="color: #999;">No savings allocated yet</p>';
             return;
         }
 
-        container.innerHTML = Object.entries(breakdown).map(([name, amount]) => `
+        container.innerHTML = goals.map(goal => `
             <div class="goal-item">
-                <span class="goal-name">${name}</span>
-                <span class="goal-amount">₹${amount.toFixed(2)}</span>
+                <span class="goal-name">${goal.name}</span>
+                <span class="goal-amount">₹${(breakdown[goal.name] || 0).toFixed(2)}</span>
             </div>
         `).join('');
     }
@@ -1048,9 +1147,10 @@ class SavingsUI {
         const ctx = document.getElementById('savingsChart')?.getContext('2d');
         if (!ctx) return;
 
-        const breakdown = app.currentMonth.totalSavingsAllocated;
-        const labels = Object.keys(breakdown);
-        const data = Object.values(breakdown);
+        const goals = app.currentMonth.savingsGoals || [];
+        const breakdown = app.currentMonth.totalSavingsAllocated || {};
+        const labels = goals.map(g => g.name);
+        const data = labels.map(name => breakdown[name] || 0);
 
         const colors = [
             'rgba(102, 126, 234, 0.7)',
@@ -1068,7 +1168,7 @@ class SavingsUI {
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: colors,
+                    backgroundColor: colors.slice(0, labels.length),
                     borderColor: '#fff',
                     borderWidth: 2
                 }]
@@ -1084,7 +1184,7 @@ class SavingsUI {
                     tooltip: {
                         callbacks: {
                             label: (context) => {
-                                return `₹${context.parsed.y.toFixed(2)}`;
+                                return `₹${context.parsed.toFixed(2)}`;
                             }
                         }
                     }
@@ -1230,12 +1330,19 @@ class SavingsUI {
 
     exportData() {
         const dataStr = app.exportData();
+        this.downloadJSON(dataStr, `savings-data-${new Date().toISOString().split('T')[0]}.json`);
+    }
+
+    downloadJSON(data, filename) {
+        const dataStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(dataBlob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `savings-data-${new Date().toISOString().split('T')[0]}.json`;
+        link.download = filename;
+        document.body.appendChild(link);
         link.click();
+        link.remove();
         URL.revokeObjectURL(url);
     }
 
