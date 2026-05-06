@@ -16,22 +16,64 @@ class SavingsApp {
     // DATA MANAGEMENT
     // ============================================================
 
+    getMonthStorageKey(monthId) {
+        return `savingsData_${monthId}`;
+    }
+
+    getMetadataStorageKey() {
+        return 'savingsData_metadata';
+    }
+
     loadData() {
-        const stored = localStorage.getItem('savingsData');
-        if (stored) {
+        // Load metadata to get current month ID
+        const metadataKey = this.getMetadataStorageKey();
+        const metadata = localStorage.getItem(metadataKey);
+        let currentMonthId = null;
+        
+        if (metadata) {
             try {
-                this.data = JSON.parse(stored);
-                
-                if (this.data.months && Array.isArray(this.data.months)) {
-                    this.normalizeAllMonths();
-                }
-                
-                if (this.data.currentMonthId) {
-                    this.currentMonth = this.data.months.find(m => m.id === this.data.currentMonthId);
-                }
+                const metaObj = JSON.parse(metadata);
+                currentMonthId = metaObj.currentMonthId;
             } catch (e) {
-                console.error('Error loading data:', e);
-                this.initializeDefaultData();
+                console.error('Error loading metadata:', e);
+            }
+        }
+
+        // Load all months from individual storage keys
+        const months = [];
+        for (let key in localStorage) {
+            if (key.startsWith('savingsData_') && key.match(/savingsData_\d{4}-\d{2}$/)) {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    try {
+                        const month = JSON.parse(stored);
+                        if (month.id) {
+                            months.push(month);
+                        }
+                    } catch (e) {
+                        console.error(`Error loading month ${key}:`, e);
+                    }
+                }
+            }
+        }
+
+        if (months.length > 0) {
+            months.sort((a, b) => a.id.localeCompare(b.id));
+            this.data = {
+                months: months,
+                currentMonthId: currentMonthId
+            };
+            
+            this.normalizeAllMonths();
+
+            // Set current month from metadata or use latest month
+            if (currentMonthId) {
+                this.currentMonth = this.data.months.find(m => m.id === currentMonthId);
+            }
+            
+            if (!this.currentMonth && months.length > 0) {
+                this.currentMonth = months[months.length - 1];
+                this.data.currentMonthId = this.currentMonth.id;
             }
         } else {
             this.initializeDefaultData();
@@ -39,17 +81,30 @@ class SavingsApp {
     }
 
     saveData() {
-        localStorage.setItem('savingsData', JSON.stringify(this.data));
+        // Save metadata (current month ID)
+        const metadataKey = this.getMetadataStorageKey();
+        localStorage.setItem(metadataKey, JSON.stringify({
+            currentMonthId: this.data.currentMonthId
+        }));
+
+        // Save each month to its own storage key
+        if (this.data.months && Array.isArray(this.data.months)) {
+            this.data.months.forEach(month => {
+                const key = this.getMonthStorageKey(month.id);
+                localStorage.setItem(key, JSON.stringify(month));
+            });
+        }
     }
 
     initializeDefaultData() {
         const now = new Date();
         const monthId = this.getMonthId(now);
+        const newMonth = this.createNewMonth(now);
         this.data = {
-            months: [this.createNewMonth(now)],
+            months: [newMonth],
             currentMonthId: monthId
         };
-        this.currentMonth = this.data.months[0];
+        this.currentMonth = newMonth;
         this.saveData();
     }
 
@@ -198,6 +253,7 @@ class SavingsApp {
         this.data.months.forEach(month => {
             this.ensureInvestmentStructures(month);
             this.recalculateInvestmentStatsForMonth(month);
+            this.recalculateDailyEntriesForMonth(month);
         });
     }
 
@@ -432,18 +488,30 @@ class SavingsApp {
         return Math.max(0, totalDebt);
     }
 
-    /**
-     * Calculate today's daily limit considering debt
-     * If debt exists: limit = baseDailyLimit * (penaltyPercentage / 100)
-     * If no debt: limit = baseDailyLimit
-     */
-    getTodayDailyLimit(dateStr = null) {
+    getTodayDebtRepaymentReserve(dateStr = null, currentDebtOverride = null) {
         const baseDailyLimit = this.getBaseDailyLimit();
-        const debt = this.getCurrentDebt();
+        const debt = currentDebtOverride !== null ? currentDebtOverride : this.getCurrentDebt();
         const penaltyPercent = this.currentMonth?.penaltyPercentage || 50;
 
         if (debt > 0) {
             return baseDailyLimit * (penaltyPercent / 100);
+        }
+        return 0;
+    }
+
+    /**
+     * Calculate today's daily spending allowance considering debt
+     * If debt exists: spending allowance = baseDailyLimit * (1 - penaltyPercentage / 100)
+     * If no debt: spending allowance = baseDailyLimit
+     */
+    getTodayDailyLimit(dateStr = null, currentDebtOverride = null) {
+        const baseDailyLimit = this.getBaseDailyLimit();
+        const debt = currentDebtOverride !== null ? currentDebtOverride : this.getCurrentDebt();
+        const penaltyPercent = this.currentMonth?.penaltyPercentage || 50;
+
+        if (debt > 0) {
+            const debtReserve = baseDailyLimit * (penaltyPercent / 100);
+            return Math.max(0, baseDailyLimit - debtReserve);
         }
         return baseDailyLimit;
     }
@@ -463,43 +531,56 @@ class SavingsApp {
         return Math.max(0, limit - spent);
     }
 
+    recalculateDailyEntriesForMonth(month) {
+        if (!month || !Array.isArray(month.dailyEntries)) return;
+
+        const previousMonth = this.currentMonth;
+        this.currentMonth = month;
+
+        month.dailyEntries.sort((a, b) => a.date.localeCompare(b.date));
+
+        let currentDebt = parseFloat(month.carryoverDebt) || 0;
+        month.dailyEntries.forEach(entry => {
+            const amount = parseFloat(entry.expenseAmount) || 0;
+            const result = this.processDailyExpense(entry.date, amount, currentDebt);
+
+            entry.dailyLimit = result.todayLimit;
+            entry.debtRepaymentReserve = result.debtRepaymentReserve;
+            entry.debtAccrued = result.debtAccrued;
+            entry.debtRepaid = result.debtRepaid;
+            entry.surplus = result.surplus;
+            entry.savingsAllocation = this.allocateSurplus(result.surplus);
+
+            currentDebt = result.newTotalDebt;
+        });
+
+        this.updateTotalSavingsAllocated(month);
+        this.currentMonth = previousMonth;
+    }
+
     /**
      * Process daily expense
-     * Returns: { surplus, debtAccrued, newTotalDebt }
+     * Returns: { surplus, debtAccrued, debtRepaid, newTotalDebt, todayLimit, debtRepaymentReserve }
      */
-    processDailyExpense(dateStr, expenseAmount) {
+    processDailyExpense(dateStr, expenseAmount, currentDebtOverride = null) {
         const baseDailyLimit = this.getBaseDailyLimit();
-        const currentDebt = this.getCurrentDebt();
-        const penaltyPercent = this.currentMonth?.penaltyPercentage || 50;
-
-        // Determine today's allowance
-        let todayLimit = baseDailyLimit;
-        if (currentDebt > 0) {
-            todayLimit = baseDailyLimit * (penaltyPercent / 100);
-        }
+        const currentDebt = currentDebtOverride !== null ? currentDebtOverride : this.getCurrentDebt();
+        const todayLimit = this.getTodayDailyLimit(dateStr, currentDebt);
+        const debtRepaymentReserve = Math.max(0, baseDailyLimit - todayLimit);
 
         let surplus = 0;
         let debtAccrued = 0;
         let debtRepaid = 0;
 
-        if (expenseAmount <= todayLimit) {
-            // Spending within limit
-            surplus = todayLimit - expenseAmount;
-        } else {
-            // Overspending
-            const overage = expenseAmount - todayLimit;
-            debtAccrued = overage;
-        }
+        const spent = parseFloat(expenseAmount) || 0;
+        const spendingAllowance = todayLimit;
+        const unusedSpendingAllowance = Math.max(0, spendingAllowance - spent);
 
-        // If there's existing debt and surplus today, apply surplus to debt first
-        if (currentDebt > 0 && surplus > 0) {
-            if (surplus >= currentDebt) {
-                debtRepaid = currentDebt;
-                surplus = surplus - currentDebt;
-            } else {
-                debtRepaid = surplus;
-                surplus = 0;
-            }
+        debtRepaid = currentDebt > 0 ? Math.min(currentDebt, debtRepaymentReserve) : 0;
+        surplus = unusedSpendingAllowance + Math.max(0, debtRepaymentReserve - debtRepaid);
+
+        if (spent > spendingAllowance) {
+            debtAccrued = spent - spendingAllowance;
         }
 
         const newTotalDebt = currentDebt - debtRepaid + debtAccrued;
@@ -509,7 +590,8 @@ class SavingsApp {
             debtAccrued: debtAccrued,
             debtRepaid: debtRepaid,
             newTotalDebt: Math.max(0, newTotalDebt),
-            todayLimit: todayLimit
+            todayLimit: todayLimit,
+            debtRepaymentReserve: debtRepaymentReserve
         };
     }
 
@@ -555,15 +637,8 @@ class SavingsApp {
             e => e.date !== dateStr
         );
 
-        // Process only daily-limit spending. Category-only entries should not create surplus.
-        const result = totalExpenseForDate > 0
-            ? this.processDailyExpense(dateStr, totalExpenseForDate)
-            : {
-                todayLimit: this.getTodayDailyLimit(dateStr),
-                debtAccrued: 0,
-                debtRepaid: 0,
-                surplus: 0
-            };
+        // Process daily spending and debt repayment even if no expense is recorded.
+        const result = this.processDailyExpense(dateStr, totalExpenseForDate);
 
         // Allocate surplus to goals
         const allocation = this.allocateSurplus(result.surplus);
@@ -573,6 +648,7 @@ class SavingsApp {
             date: dateStr,
             expenseAmount: totalExpenseForDate,
             dailyLimit: result.todayLimit,
+            debtRepaymentReserve: result.debtRepaymentReserve,
             debtAccrued: result.debtAccrued,
             debtRepaid: result.debtRepaid,
             surplus: result.surplus,
@@ -595,24 +671,24 @@ class SavingsApp {
         return entry;
     }
 
-    updateTotalSavingsAllocated() {
-        if (!this.currentMonth) return;
+    updateTotalSavingsAllocated(month = this.currentMonth) {
+        if (!month) return;
 
-        // Initialize totals based on current month's savingsGoals
+        // Initialize totals based on the month's savings goals
         const totals = {};
-        (this.currentMonth.savingsGoals || []).forEach(goal => {
+        (month.savingsGoals || []).forEach(goal => {
             totals[goal.name] = 0;
         });
 
-        this.currentMonth.dailyEntries.forEach(entry => {
+        (month.dailyEntries || []).forEach(entry => {
             Object.keys(entry.savingsAllocation || {}).forEach(goalName => {
                 if (totals.hasOwnProperty(goalName)) {
-                    totals[goalName] += entry.savingsAllocation[goalName];
+                    totals[goalName] += parseFloat(entry.savingsAllocation[goalName]) || 0;
                 }
             });
         });
 
-        this.currentMonth.totalSavingsAllocated = totals;
+        month.totalSavingsAllocated = totals;
     }
 
     getEntryByDate(dateStr) {
@@ -761,20 +837,23 @@ class SavingsApp {
         }
 
         let totalSpent = 0;
+        let totalSaved = 0;
+        let currentDebt = parseFloat(month.carryoverDebt) || 0;
+
         (month.dailyEntries || []).forEach(entry => {
-            totalSpent += entry.expenseAmount;
+            totalSpent += parseFloat(entry.expenseAmount) || 0;
+            currentDebt += parseFloat(entry.debtAccrued) || 0;
+            currentDebt -= parseFloat(entry.debtRepaid) || 0;
+            totalSaved += Object.values(entry.savingsAllocation || {}).reduce((sum, amount) => sum + (parseFloat(amount) || 0), 0);
         });
 
-        let totalSaved = 0;
-        Object.values(month.totalSavingsAllocated || {}).forEach(amount => {
-            totalSaved += amount;
-        });
+        currentDebt = Math.max(0, currentDebt);
 
         return {
             totalSpent: totalSpent,
             totalSaved: totalSaved,
             daysLogged: (month.dailyEntries || []).length,
-            currentDebt: month.totalDebt || 0,
+            currentDebt: currentDebt,
             savingsBreakdown: month.totalSavingsAllocated || {}
         };
     }

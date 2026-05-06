@@ -458,11 +458,12 @@ class SavingsUI {
                     <div class="entry-date">${selectedDate}</div>
                     <div style="color: #f5576c; font-weight: bold;">Daily Spend: ₹${entry.expenseAmount.toFixed(2)}</div>
                     ${categoryStr ? `<div style="color: #667eea; font-weight: bold;">Category Spend: ${categoryStr}</div>` : ''}
-                    <div style="color: #666; font-size: 0.9em;">Limit: ₹${entry.dailyLimit.toFixed(2)}</div>
-                    ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved: ₹${entry.surplus.toFixed(2)}</div>` : ''}
+                    <div style="color: #666; font-size: 0.9em;">Spending Allowance: ₹${entry.dailyLimit.toFixed(2)}</div>
+                    ${entry.debtRepaymentReserve > 0 ? `<div style="color: #2563eb;">Debt Reserve: ₹${entry.debtRepaymentReserve.toFixed(2)}</div>` : ''}
+                    ${entry.debtRepaid > 0 ? `<div style="color: #4ade80;">Debt Paid: ₹${entry.debtRepaid.toFixed(2)}</div>` : ''}
+                    ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved to goals: ₹${entry.surplus.toFixed(2)}</div>` : ''}
                     ${entry.debtAccrued > 0 ? `<div style="color: #f5576c;">Debt Added: ₹${entry.debtAccrued.toFixed(2)}</div>` : ''}
-                    ${entry.debtRepaid > 0 ? `<div style="color: #4ade80;">Debt Repaid: ₹${entry.debtRepaid.toFixed(2)}</div>` : ''}
-                    <div style="font-size: 0.85em; color: #999; margin-top: 8px;">${allocationStr}</div>
+                    ${allocationStr ? `<div style="font-size: 0.85em; color: #999; margin-top: 8px;">${allocationStr}</div>` : ''}
                 </div>
             `;
         } else {
@@ -513,10 +514,11 @@ class SavingsUI {
                     <div class="entry-date">${entry.date}</div>
                     <div style="color: #f5576c; font-weight: bold;">Daily Spend: ₹${entry.expenseAmount.toFixed(2)}</div>
                     ${this.formatCategoryExpenses(entry)}
-                    <div style="color: #666; font-size: 0.9em;">Limit: ₹${entry.dailyLimit.toFixed(2)}</div>
-                    ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved: ₹${entry.surplus.toFixed(2)}</div>` : ''}
+                    <div style="color: #666; font-size: 0.9em;">Spending Allowance: ₹${entry.dailyLimit.toFixed(2)}</div>
+                    ${entry.debtRepaymentReserve > 0 ? `<div style="color: #2563eb;">Debt Reserve: ₹${entry.debtRepaymentReserve.toFixed(2)}</div>` : ''}
+                    ${entry.debtRepaid > 0 ? `<div style="color: #4ade80;">Debt Paid: ₹${entry.debtRepaid.toFixed(2)}</div>` : ''}
+                    ${entry.surplus > 0 ? `<div style="color: #4ade80; font-weight: bold;">Saved to goals: ₹${entry.surplus.toFixed(2)}</div>` : ''}
                     ${entry.debtAccrued > 0 ? `<div style="color: #f5576c;">Debt Added: ₹${entry.debtAccrued.toFixed(2)}</div>` : ''}
-                    ${entry.debtRepaid > 0 ? `<div style="color: #4ade80;">Debt Repaid: ₹${entry.debtRepaid.toFixed(2)}</div>` : ''}
                 </div>
             </div>
         `).join('');
@@ -1666,31 +1668,6 @@ class SavingsUI {
         });
     }
 }
-
-// Add helper method to app for getting stats of any month
-SavingsApp.prototype.getMonthStatsForMonth = function(monthId) {
-    const month = this.data.months.find(m => m.id === monthId);
-    if (!month) {
-        return { totalSpent: 0, totalSaved: 0, daysLogged: 0, currentDebt: 0 };
-    }
-
-    let totalSpent = 0;
-    month.dailyEntries.forEach(entry => {
-        totalSpent += entry.expenseAmount;
-    });
-
-    let totalSaved = 0;
-    Object.values(month.totalSavingsAllocated).forEach(amount => {
-        totalSaved += amount;
-    });
-
-    return {
-        totalSpent: totalSpent,
-        totalSaved: totalSaved,
-        daysLogged: month.dailyEntries.length,
-        currentDebt: month.totalDebt || 0
-    };
-};
 
 // Initialize UI when DOM is ready
 let ui;
